@@ -1,149 +1,67 @@
-#!/usr/bin/env bash
+#!/usr/bin/env ruby
+require 'pathname'
 
-# Prevent the script from being run multiple times simultaneously
-trap "rm -f setup.lock; exit 1" INT TERM
-export TOP_PID=$$
-[[ -f setup.lock ]] && echo 'Setup alreaady running; exiting...' && exit
-touch setup.lock
+# path to your application root.
+APP_ROOT = Pathname.new File.expand_path('../../',  __FILE__)
 
-# Define some helper functions
-successfully() {
-  $* || (echo "----- failed" 1>&2 && kill -s TERM $TOP_PID)
-}
+def silently command
+  system command + " > /dev/null 2>&1"
+end
 
-append_log() {
-  $* >> log/setup.log
-}
+def successfully command
+  silently command or fail "Error in script: " + command
+end
 
-quietly() {
-  $* > /dev/null 2>&1
-}
+def announce message
+  puts "\n== " + message + " =="
+end
 
-# Create the log file for this file
-successfully mkdir -p log
-append_log successfully mkdir -p tmp
-append_log successfully touch log/setup.log
-append_log successfully echo "\n\n----- Starting bin/setup"
+Dir.chdir APP_ROOT do
+  # This script is a starting point to setup your application.
+  # Add necessary setup steps to this file:
 
-# This script assumes your project uses bundler; Welcome new comers
-if [ ! -d .bundle ]; then
-  echo "Oh. Hello there. Haven't seen you before..."
-  echo "This may take a second. Grab a snickers. Or something healthy."
-  echo "Tail the log/setup.log if you get bored."
-  echo
+  announce "Installing external dependencies"
+  silently "brew tap | grep -s brewdler || brew tap homebrew/brewdler"
+  silently "brew brewdle"
 
-  # Assume they haven't setup heroku remotes either
-  PROJECT_NAME=$(cd ..;basename $(pwd))
-  quietly git remote add staging git@heroku.com:$PROJECT_NAME-staging.git
-  quietly git remote add production git@heroku.com:$PROJECT_NAME-production.git
-  quietly git config heroku.account work
-  quietly git config heroku.remote staging
-  quietly git remote update
-fi
+  unless silently "ls -A /usr/local/var/postgres"
+    announce "initializing postgres db in /usr/local/var/postgres"
+    silently "initdb /usr/local/var/postgres"
 
-# Assuming your project uses direnv, allow the .envrc file
-if [ ! -f .git/safe ]; then
-  successfully mkdir -p .git/safe
-fi
+    announce "creating superuser 'postgres'.  Hope that's cool?"
+    silently "createuser -s postgres"
+  end
 
-# Assuming your project uses dotenv gem, copy a .env over from .env.example
-if [ -f .env.example ]; then
-  if [ ! -f .env ]; then
-    echo "Creating .env file from example. Please edit it!"
-    successfully cp .env.example .env
-  else
-    MISSING_ENV_VARS=$(comm -13 <(cut -f1 -d= <.env|sed -e 's/^export\ //g'|grep -Ev "^\#"| sort) <(cut -f1 -d= <.env.example|sed -e 's/^export\ //g'|grep -Ev "^\#"|sort)|sed '/^$/d')
-    if [[ -n $MISSING_ENV_VARS ]]; then
-      echo "###############################################################################"
-      echo "You are missing the following ENV vars in .env:"
-      echo $MISSING_ENV_VARS
-      echo
-      echo "Please copy these missing variables from: \`heroku config -s\`"
-      echo "###############################################################################"
-      echo
-    fi
-  fi
-else
-  append_log echo "No .env.example file found; Skipping"
-fi
+  unless silently "ls -A ~/Library/LaunchAgents/homebrew.mxcl.postgresql.plist" 
+    announce "setting up Postgres to start on launch"
+    silently "ln -sfv /usr/local/opt/postgresql/*.plist ~/Library/LaunchAgents"
+    silently "launchctl load -w ~/Library/LaunchAgents/homebrew.mxcl.postgresql.plist"
+  end
 
-# WITH_DEP=true bin/setup will install system dependencies (mac only)
-if [ -n "$WITH_DEP" ]; then
-  echo "Checking system dependencies..."
-  # Ubuntu/Debian support was once working; Here it determines if you're on a mac or debian
-  IS_MAC=false; IS_DEBIAN=false
-  [[ -f /etc/debian_version ]] && IS_DEBIAN=true
-  [[ $(command -v sw_vers) && $(sw_vers -productVersion | cut -f2 -d.) -ge 7 ]] && IS_MAC=true
+  unless silently "ls -A ~/Library/LaunchAgents/homebrew.mxcl.redis.plist" 
+    announce "setting up Redis to start on launch"
+    silently "ln -sfv /usr/local/opt/redis/*.plist ~/Library/LaunchAgents"
+    silently "launchctl load -w ~/Library/LaunchAgents/homebrew.mxcl.redis.plist"
+  end
 
-  if $IS_MAC; then
-    append_log brew bundle
+  announce "Installing Rubygem dependencies"
+  silently "gem install bundler"
+  silently "bundle check || bundle install"
 
-    if [ "$(ls -A /usr/local/var/postgress 2>/dev/null|wc -l)" -eq 0 ]; then
-      # Init a postgres db (it will fail gracefully if one is already created)
-      append_log initdb /usr/local/var/postgres -E utf8
-    fi
+  unless File.exist?("config/database.yml")
+   announce "Copying sample files"
+   silently "cp config/database.yml.sample config/database.yml"
+  end
 
-    # Auto load postgresql, memcache and redis at start up (and now)
-    ln -sfv /usr/local/opt/postgresql/*.plist ~/Library/LaunchAgents
-    ln -sfv /usr/local/opt/memcached/*.plist ~/Library/LaunchAgents
-    ln -sfv /usr/local/opt/redis/*.plist ~/Library/LaunchAgents
+  announce "Preparing database"
+  silently "bin/rake db:setup db:test:prepare"
 
-    if [ -f ~/Library/LaunchAgents/homebrew.mxcl.postgresql.plist ]; then
-      append_log launchctl load -w ~/Library/LaunchAgents/homebrew.mxcl.postgresql.plist
-    fi
+  announce "Removing old logs and tempfiles"
+  silently "rm -f log/*"
+  silently "rm -rf tmp/cache"
 
-    if [ -f ~/Library/LaunchAgents/homebrew.mxcl.memcached.plist ]; then
-      append_log launchctl load -w ~/Library/LaunchAgents/homebrew.mxcl.memcached.plist
-    fi
+  announce "Restarting application server"
+  silently "touch tmp/restart.txt"
 
-    if [ -f ~/Library/LaunchAgents/homebrew.mxcl.redis.plist ]; then
-      append_log launchctl load -w ~/Library/LaunchAgents/homebrew.mxcl.redis.plist
-    fi
-
-    echo "#TODO: setup postgresql user"
-  fi
-fi
-
-echo "Installing libraries..."
-append_log successfully gem list -i bundler || gem install bundler
-append_log successfully bundle install --path vendor/bundle --binstubs vendor/bundle/bin
-
-# Reset database and seed it
-if [ -z "$KEEPDB" ] && [ -f config/database.yml ]; then
-  echo "Reloading the database..."
-  append_log successfully bundle exec rake db:drop:all db:create:all db:migrate
-  append_log successfully bundle exec rake db:seed
-fi
-
-# Flush all the memcaches
-ps ax | grep "memcache[d]" > /dev/null
-if [ $? -eq 0 ]; then
-  command -v nc > /dev/null
-  if [ $? -eq 0 ]; then
-    echo "Flushing Memcache..."
-    append_log successfully echo -e "flush_all\nquit\n" | nc 127.0.0.1 11211
-  else
-    echo "WARNING: Please install netcat for automatic flushing of memcache"
-  fi
-fi
-
-# Flush all the redises
-ps ax | grep "re[d]is" > /dev/null
-if [ $? -eq 0 ]; then
-  command -v redis-cli > /dev/null
-  if [ $? -eq 0 ]; then
-    echo "Flushing Redis..."
-    append_log successfully redis-cli FlushDB
-  fi
-fi
-
-# If pow is running issue it a restart
-ps ax | grep "pow$" > /dev/null
-if [ $? -eq 0 ]; then
-  echo "Restarting Pow..."
-  touch tmp/restart.txt
-fi
-
-# Clean up
-rm -f setup.lock
-echo "All done!"
+  announce "Cool...setup is done."
+end
