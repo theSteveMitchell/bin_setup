@@ -1,7 +1,9 @@
 Bin Setup
 =========
 
-By [Brightbit](http://brightbit.com).
+Based on idea By [Brightbit](http://brightbit.com).
+
+This is a fork of Brightbit's setup script.  The script is written in ruby instead of bash for cleanliness.  We also dropped Brightbit's assumption about Heroku and Dorenv, because I never use those.  
 
 Make new developers like you.
 
@@ -12,7 +14,7 @@ Make new developers like you.
 Create a bin/setup (or script/setup) file in your Rails project. From the root of your project run:
 
 ```bash
-echo 'bash -c "$(curl -sL https://raw.github.com/brightbit/bin_setup/master/bin/setup)"' > bin/setup
+echo 'bash -c "$(curl -sL https://raw.github.com/thestevemitchell/bin_setup/master/bin/setup)"' > bin/setup
 chmod +x bin/setup
 ```
 
@@ -46,15 +48,7 @@ This will run `bundle install` (and install bundler if it doesn't exist) and man
 
 #### Installing dependencies:
 
-```bash
-WITH_DEP=true bin/setup
-```
-
-#### Skip resetting the DB:
-
-```bash
-KEEP_DB=true bin/setup
-```
+it just does them by default...
 
 ## Your Project's README
 
@@ -85,25 +79,19 @@ Bin setup assumes you are using:
 * [Bundler](http://gembundler.com/) with binstubs at vendor/bundle/bin. It installs and runs bundle install (setting your binstubs up for you).
 * [Brewdler](https://github.com/andrew/brewdler) - It installs and runs brewdle.
 * `.git/safe/../../bin` in your `$PATH`; [See](https://github.com/ericboehs/dotfiles/blob/dd4554382f0344c9a5da9ae77e9f2ac445c25df1/shell/zsh/zshrc#L47-49)
-* [Dotenv](https://github.com/bkeepers/dotenv) - It copies .env.example to .env and compares the two. Alerts devs if they are missing .env vars.
-* Heroku - And that you have your apps named the same as the current directory with -staging, -qa and -production on then end (e.g. bin_setup-production). If you don't it should fail silently.
+
 
 It also assumes you:
 * Have more than 512MB of RAM (alluding to the next point)
 * Don't mind auto running homebrew's lightweight configs of postgres, memcache and redis
-* Have a Gemfile, Brewfile, .env.example and .envrc checked into your repo
-* Don't have a .env file checked in
-* Have a working db/seeds.rb that will be ran via `rake db:seed`
+* Have a Gemfile, and Brewfile checked into your repo
 * You like snickers.
 
 ### Todo
 
-* Document .env.example and how to set it up (gitignore, Dotenv)
 * Add databases.rake override files (4.x) for resetting the DB while rails is running
-* Add a .envrc to the project if one doesn't exist
-* Add a .env.example to the project if one doesn't exist
 * Make it happy with pow (it already is but I think you have to symlink .powenv to .env)
-* Allow for customized Heroku app names
+
 
 ### Bug reports
 
