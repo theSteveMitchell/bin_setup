@@ -54,7 +54,7 @@ Dir.chdir APP_ROOT do
   end
 
   announce "Preparing database"
-  silently "bin/rake db:setup db:test:prepare"
+  silently "rake db:create db:migrate db:setup db:test:prepare""
 
   announce "Removing old logs and tempfiles"
   silently "rm -f log/*"
