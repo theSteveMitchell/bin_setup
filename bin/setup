@@ -54,14 +54,13 @@ Dir.chdir APP_ROOT do
   end
 
   announce "Preparing database"
-  silently "rake db:create db:migrate db:setup db:test:prepare""
+  successfully 'bin/rails db:setup'
 
   announce "Removing old logs and tempfiles"
-  silently "rm -f log/*"
-  silently "rm -rf tmp/cache"
+  silently 'bin/rails log:clear tmp:clear'
 
   announce "Restarting application server"
-  silently "touch tmp/restart.txt"
+  silently 'bin/rails restart'
 
   announce "Cool...setup is done."
 end
